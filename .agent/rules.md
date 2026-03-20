@@ -37,4 +37,7 @@
 
 ## 5. 指令 (Commands)
 *   `npm run dev`：啟動開發伺服器。
-*   `npm install`：安裝依賴。
+## 6. AI 行為規範 (AI Behavior Rules)
+*   **禁止在專案目錄產出暫存檔**：禁止在 `backend/`, `frontend/`, `src/` 等專案資料夾內產出如 `build_errors.txt`, `build_output.txt` 等臨時除錯檔案。
+*   **暫存檔處理**：如需暫存指令輸出進行分析，必須將檔案存放在系統的 `/tmp/` 目錄中，且在分析結束後盡量清理。
+*   **環境整潔**：保持專案根目錄整潔，避免非專案必要的檔案（如 `task.md`, `walkthrough.md` 等，這些應依系統規範存放在指定目錄中）。

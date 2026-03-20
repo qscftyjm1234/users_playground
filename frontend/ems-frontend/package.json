@@ -14,11 +14,15 @@
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.11.0",
     "@mui/material": "^5.11.0",
+    "antd": "^6.3.2",
     "axios": "^1.13.6",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.37.0",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.1",
+    "recharts": "^3.8.0",
     "tailwind-merge": "^2.6.1"
   },
   "devDependencies": {

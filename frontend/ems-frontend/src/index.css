@@ -4,20 +4,63 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 leading-relaxed antialiased;
+    @apply bg-slate-50 text-slate-900 leading-relaxed antialiased transition-colors duration-300;
+  }
+  
+  html.dark body {
+    @apply bg-slate-950 text-slate-100;
   }
 }
 
 @layer components {
   .premium-card {
-    @apply bg-white rounded-3xl border border-slate-100/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
+    @apply bg-white rounded-3xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
   }
   
-  .btn-primary {
-    @apply bg-blue-600 text-white font-semibold py-3 px-6 rounded-2xl shadow-lg shadow-blue-100 transition-all duration-300 hover:scale-105 active:scale-95 hover:bg-blue-700;
+  .dark .premium-card {
+    @apply bg-slate-900 border-slate-800 shadow-[0_8px_30px_rgb(0,0,0,0.2)];
+  }
+  
+  .premium-table-header {
+    @apply bg-slate-50/50 px-6 py-4 text-xs font-black uppercase tracking-widest text-slate-600 border-b border-slate-200;
+  }
+  
+  .dark .premium-table-header {
+    @apply bg-slate-800/40 text-slate-500 border-slate-800;
   }
 
-  .micro-label {
-    @apply text-[10px] font-black uppercase tracking-widest text-slate-400;
+  .premium-table-row {
+    @apply transition-all duration-300 border-b border-slate-100/50;
   }
+  
+  .premium-table-row:hover {
+    @apply bg-slate-100/60;
+  }
+
+  .dark .premium-table-row {
+    @apply border-slate-800/50;
+  }
+
+  .dark .premium-table-row:hover {
+    @apply bg-slate-800/50 !important;
+  }
+
+  .premium-badge {
+    @apply px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border transition-all duration-300;
+  }
+
+  .badge-success { @apply bg-emerald-50 text-emerald-700 border-emerald-100; }
+  .badge-warning { @apply bg-amber-50 text-amber-700 border-amber-100; }
+  .badge-error { @apply bg-rose-50 text-rose-700 border-rose-100; }
+  .badge-neutral { @apply bg-slate-100 text-slate-700 border-slate-200; }
+
+  /* Force badge text visibility in dark mode */
+  .dark .premium-badge {
+    @apply bg-slate-800/50 border-slate-700/50 text-slate-300;
+  }
+  
+  .dark .badge-success { @apply bg-emerald-950/40 text-emerald-400 border-emerald-800/50 !important; }
+  .dark .badge-warning { @apply bg-amber-950/40 text-amber-400 border-amber-800/50 !important; }
+  .dark .badge-error { @apply bg-rose-950/40 text-rose-400 border-rose-800/50 !important; }
+  .dark .badge-neutral { @apply bg-slate-800/50 text-slate-400 border-slate-700/50 !important; }
 }

@@ -1,11 +1,16 @@
+ <!-- Software Development Kit，Microsoft.NET.Sdk.Web就是告訴SDK要一個Web App 的開發包 -->
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <!-- 定義執行環境版本，決定了可以使用哪些最新的 C# 語法 -->
     <TargetFramework>net7.0</TargetFramework>
+    <!-- 開啟全域空值安全檢查，強迫開發者交代變數是否可能為 null (CS8618 來源) -->
     <Nullable>enable</Nullable>
+    <!-- 自動引入Microsoft.NET.Sdk.Web最常用的命名空間 (如 System, Microsoft.AspNetCore.Builder)，減少每個檔案重複寫 using 的次數 -->
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- 透過NuGet引入套件區 -->
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="7.0.14">
@@ -13,7 +18,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
+  <!-- 引用專案區 -->
   <ItemGroup>
     <ProjectReference Include="..\EmployeeManagement.Infrastructure\EmployeeManagement.Infrastructure.csproj" />
   </ItemGroup>
