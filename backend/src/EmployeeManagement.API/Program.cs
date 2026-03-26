@@ -37,8 +37,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // 3. 實作類別登記 (DI 依賴注入)
 // 登記通用倉儲 (Generic Repository)
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-// 登記員工專屬倉儲
-builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 // 登記日誌與服務相關小幫手
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
@@ -71,6 +69,13 @@ builder.Services.AddCors(options =>
 
 // --- 程式實體化 ---
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    // 因為我們移除了 Migrations，這裡直接確保資料表存在 (適合開發與大幅度重構階段)
+    context.Database.EnsureCreated();
+}
 
 // --- 中間件管道 (Middleware Pipeline) ---
 // 此處負責定義請求進來時的「海關檢查站」，順序非常重要！

@@ -1,9 +1,6 @@
-version: '3.8'
-
 services:
-  mysql_db:
+  lifehub_db:
     image: mysql:8.0
-    container_name: employee_mysql
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
@@ -12,6 +9,32 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+
+  lifehub_backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=lifehub_db;Port=3306;Database=employee_db;User=root;Password=root;
+    ports:
+      - "5000:80"
+    depends_on:
+      - lifehub_db
+
+  lifehub_frontend:
+    build:
+      context: ./frontend/ems-frontend
+      dockerfile: Dockerfile.dev
+    restart: always
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/ems-frontend:/app
+      - /app/node_modules
+    depends_on:
+      - lifehub_backend
 
 volumes:
   mysql_data:

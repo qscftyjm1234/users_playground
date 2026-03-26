@@ -30,26 +30,7 @@ namespace EmployeeManagement.Application.Interfaces
         Task SaveChangesAsync();
     }
 
-    /// <summary>
-    /// 員工專屬倉儲介面
-    /// 繼承了上面的基本功能，並額外增加「員工管理專用」的高級功能。
-    /// </summary>
-    public interface IEmployeeRepository : IRepository<Employee>
-    {
-        // 儀表板專用：抓取所有員工的詳細資料（包含部門與職位名稱）
-        Task<IEnumerable<Employee>> GetEmployeesWithDetailsAsync();
-        
-        // 員工列表專用：這支最強大！同時處理「分頁」與「關鍵字搜尋」。回傳名單 + 總數
-        Task<(IEnumerable<Employee> Items, int TotalCount)> GetEmployeesPagedAsync(int pageNumber, int pageSize, string? searchTerm = null);
-        
-        // 依 ID 抓取特定員工，並包含他的部門名稱以便顯示
-        Task<Employee> GetEmployeeWithDetailsAsync(int id);
-        
-        // 業務規則檢查：確認註冊的 Email 是否已經有人用過了
-        Task<bool> IsEmailUniqueAsync(string email);
-    }
 
-    /// <summary>
     /// 稽核日誌 (Audit Log) 倉儲介面
     /// </summary>
     public interface IAuditLogRepository : IRepository<AuditLog>

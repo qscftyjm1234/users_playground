@@ -1,21 +1,9 @@
 using System;
-using EmployeeManagement.Domain.Enums;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EmployeeManagement.Domain.Entities
 {
-
-    // abstract 是抽象類別，不能直接new，只能被繼承，本身也不能被建立實體
-    // 就像是藍圖，不能直接蓋房子，只能用藍圖去蓋房子
-    // 反正唯一目的就是被繼承
-    // 如果類別內有public abstract void Print(); 就必須實作
-    // public abstract class Animal {
-    //     // 🍕 已經實作好的方法：大家吃法都一樣
-    //     public void Eat() { 
-    //         Console.WriteLine("吃東西..."); 
-    //     }
-    //     // 📢 抽象方法：每種動物叫聲不同，所以不提供實作，只下命令
-    //     public abstract void MakeSound(); 
-    // }
     public abstract class BaseEntity
     {
         public int Id { get; set; }
@@ -24,44 +12,123 @@ namespace EmployeeManagement.Domain.Entities
         public DateTime? UpdatedAt { get; set; }
     }
 
-    public class Employee : BaseEntity
+    public enum UserRole
     {
-        public string EmployeeCode { get; set; } = string.Empty;
-        public string FirstName { get; set; } = string.Empty;
-        public string LastName { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public string Phone { get; set; } = string.Empty;
-        public int DepartmentId { get; set; }
-        public int PositionId { get; set; }
-        public EmployeeStatus Status { get; set; }
-        public DateTime HireDate { get; set; }
-
-        // Navigation Properties
-        public virtual Department? Department { get; set; }
-        public virtual Position? Position { get; set; }
-    }
-
-    public class Department : BaseEntity
-    {
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public virtual ICollection<Employee>? Employees { get; set; }
-    }
-
-    public class Position : BaseEntity
-    {
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public virtual ICollection<Employee>? Employees { get; set; }
+        User = 0,
+        SystemAdmin = 1
     }
 
     public class User : BaseEntity
     {
         public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
-        public UserRole Role { get; set; }
-        public int? EmployeeId { get; set; }
-        public virtual Employee? Employee { get; set; }
+        public string? AvatarUrl { get; set; }
+        public UserRole Role { get; set; } = UserRole.User;
+
+        public virtual ICollection<UserGroup>? UserGroups { get; set; }
+    }
+
+    public class Group : BaseEntity
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string InviteCode { get; set; } = Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper();
+
+        public virtual ICollection<UserGroup>? UserGroups { get; set; }
+        public virtual ICollection<Expense>? Expenses { get; set; }
+        public virtual ICollection<ChoreTask>? Tasks { get; set; }
+        public virtual ICollection<EventRecord>? Events { get; set; }
+        public virtual ICollection<Memo>? Memos { get; set; }
+    }
+
+    public enum GroupRole
+    {
+        Member = 0,
+        Admin = 1
+    }
+
+    public class UserGroup
+    {
+        public int UserId { get; set; }
+        public virtual User? User { get; set; }
+
+        public int GroupId { get; set; }
+        public virtual Group? Group { get; set; }
+
+        public GroupRole Role { get; set; } = GroupRole.Member;
+        public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class Expense : BaseEntity
+    {
+        public int GroupId { get; set; }
+        public virtual Group? Group { get; set; }
+
+        public int PaidByUserId { get; set; }
+        public virtual User? PaidByUser { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Amount { get; set; }
+        public string Category { get; set; } = string.Empty;
+        public DateTime Date { get; set; } = DateTime.UtcNow;
+        public string? Notes { get; set; }
+
+        public virtual ICollection<ExpenseShare>? Shares { get; set; }
+    }
+
+    public class ExpenseShare : BaseEntity
+    {
+        public int ExpenseId { get; set; }
+        public virtual Expense? Expense { get; set; }
+
+        public int UserId { get; set; }
+        public virtual User? User { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal OwedAmount { get; set; }
+    }
+
+    public enum TaskStatus
+    {
+        Pending = 0,
+        InProgress = 1,
+        Done = 2
+    }
+
+    public class ChoreTask : BaseEntity
+    {
+        public int GroupId { get; set; }
+        public virtual Group? Group { get; set; }
+
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        
+        public int? AssignedToUserId { get; set; }
+        public virtual User? AssignedToUser { get; set; }
+
+        public DateTime? DueDate { get; set; }
+        public TaskStatus Status { get; set; } = TaskStatus.Pending;
+    }
+
+    public class EventRecord : BaseEntity
+    {
+        public int GroupId { get; set; }
+        public virtual Group? Group { get; set; }
+
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public DateTime Date { get; set; }
+        public string? Location { get; set; }
+    }
+
+    public class Memo : BaseEntity
+    {
+        public int GroupId { get; set; }
+        public virtual Group? Group { get; set; }
+
+        public string Content { get; set; } = string.Empty;
+        public string? Tags { get; set; } // comma separated
     }
 
     public class AuditLog : BaseEntity

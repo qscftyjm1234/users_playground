@@ -4,11 +4,6 @@ using EmployeeManagement.Domain.Entities;
 
 namespace EmployeeManagement.Infrastructure.Services
 {
-    public interface IAuditLogger
-    {
-        Task LogAsync(string entityName, int entityId, string action, string changes, string? performedBy = null);
-    }
-
     public class AuditLogger : IAuditLogger
     {
         private readonly IAuditLogRepository _repository;
