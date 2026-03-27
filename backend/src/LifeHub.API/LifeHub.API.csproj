@@ -1,0 +1,28 @@
+ <!-- Software Development Kit嚗icrosoft.NET.Sdk.Web撠望?迄SDK閬??eb App ???澆? -->
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- 摰儔?瑁??啣??嚗捱摰??臭誑雿輻?芯???啁? C# 隤? -->
+    <TargetFramework>net7.0</TargetFramework>
+    <!-- ???典?蝛箏澆??冽炎?伐?撘瑁翰??漱隞???豢?血?賜 null (CS8618 靘?) -->
+    <Nullable>enable</Nullable>
+    <!-- ?芸?撘Microsoft.NET.Sdk.Web?撣貊??征??(憒?System, Microsoft.AspNetCore.Builder)嚗?撠???獢?銴神 using ?活??-->
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- ??NuGet撘憟辣? -->
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="7.0.14">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Google.Apis.Auth" Version="1.67.0" />
+  </ItemGroup>
+  <!-- 撘撠?? -->
+  <ItemGroup>
+    <ProjectReference Include="..\LifeHub.Infrastructure\LifeHub.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
+
