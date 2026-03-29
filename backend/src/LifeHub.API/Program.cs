@@ -70,14 +70,22 @@ builder.Services.AddCors(options =>
 // --- 蝔?撖阡???---
 var app = builder.Build();
 
-/*
+// --- 自動資料庫遷移 (Auto Migration) ---
+// 這段程式碼會保證 Docker 啟動時，資料庫的表格會自動建立與更新
 using (var scope = app.Services.CreateScope())
 {
-    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    // 因為表已經存在，且頻繁修改導致衝突，暫時關閉啟動檢查
-    // context.Database.EnsureCreated();
+    try 
+    {
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        // 這行會自動檢查資料庫，如果沒表就建表，如果少欄位就補欄位
+        context.Database.Migrate();
+        Console.WriteLine("[INFO] Database Migration completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ERROR] Database Migration failed: {ex.Message}");
+    }
 }
-*/
 
 // --- 銝剝?隞嗥恣??(Middleware Pipeline) ---
 // 甇方?鞎痊摰儔隢??脖????絲?炎?亦??????虜??嚗?

@@ -11,12 +11,12 @@ import { cn } from './lib/utils';
 import AppRoutes from './routes/AppRoutes';
 
 // Data
-import { MOCK_GROUPS } from './data/mockData';
+import groupApi from './api/groupApi';
 
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   // 1. 管理使用者狀態 (從 localStorage 初始化)
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('lifehub-user');
@@ -25,33 +25,53 @@ function App() {
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('app-theme');
-    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return saved ? saved === 'light' : window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+
+  // 新增：管理群組列表與目前活躍群組細節
+  const [groups, setGroups] = useState([]);
+  const [activeGroup, setActiveGroup] = useState(null);
+  const [loadingGroups, setLoadingGroups] = useState(false);
 
   const currentPath = location.pathname;
   const isAuthPage = currentPath === '/login' || currentPath === '/register';
 
   // 2. 登入保護機制
   useEffect(() => {
-    // 如果沒登入且不在登入/註冊頁面，就跳轉回登入頁
     if (!user && !isAuthPage) {
       navigate('/login');
     }
-    // 如果已登入卻跑去登入頁面，就跳回首頁
     if (user && isAuthPage) {
       navigate('/dashboard');
     }
+    
+    // 如果登入，則抓取群組列表
+    if (user && !isAuthPage) {
+      fetchGroups();
+    }
   }, [user, isAuthPage, navigate]);
+
+  const fetchGroups = async () => {
+    try {
+      const res = await groupApi.getMine();
+      setGroups(res.data);
+    } catch (err) {
+      console.error('Failed to fetch groups:', err);
+    }
+  };
 
   // 3. 登入/登出處理函式
   const handleLogin = (userData) => {
     setUser(userData);
     localStorage.setItem('lifehub-user', JSON.stringify(userData));
+    localStorage.setItem('lifehub-token', userData.token); // 確保存入 token
     navigate('/dashboard');
   };
 
   const handleLogout = () => {
     setUser(null);
+    setActiveGroup(null);
+    setGroups([]);
     localStorage.removeItem('lifehub-user');
     localStorage.removeItem('lifehub-token');
     navigate('/login');
@@ -70,11 +90,29 @@ function App() {
     }
   }, [isDarkMode]);
 
-  // 5. 群組相關邏輯 (原有邏輯)
+  // 5. 群組細節抓取邏輯
   const groupPathMatch = currentPath.match(/\/groups\/([^\/]+)/);
   const activeGroupId = groupPathMatch ? groupPathMatch[1] : null;
-  const activeGroup = MOCK_GROUPS.find(g => g.id === activeGroupId);
   const isGroupContext = !!activeGroupId;
+
+  useEffect(() => {
+    const fetchActiveGroupDetail = async () => {
+      if (activeGroupId) {
+        try {
+          setLoadingGroups(true);
+          const res = await groupApi.getById(activeGroupId);
+          setActiveGroup(res.data);
+        } catch (err) {
+          console.error('Failed to fetch group detail:', err);
+        } finally {
+          setLoadingGroups(false);
+        }
+      } else {
+        setActiveGroup(null);
+      }
+    };
+    fetchActiveGroupDetail();
+  }, [activeGroupId]);
 
   return (
     <ConfigProvider
@@ -95,12 +133,13 @@ function App() {
       )}>
         {/* 只在非登入頁顯示 Sidebar (且必須已登入) */}
         {!isAuthPage && user && (
-          <Sidebar 
-            isDarkMode={isDarkMode} 
-            setIsDarkMode={setIsDarkMode} 
-            activeGroup={activeGroup} 
+          <Sidebar
+            isDarkMode={isDarkMode}
+            setIsDarkMode={setIsDarkMode}
+            activeGroup={activeGroup}
             isGroupContext={isGroupContext}
             onLogout={handleLogout} // 注入登出功能
+            user={user}
           />
         )}
 
@@ -121,12 +160,18 @@ function App() {
           )}
 
           <section className={cn({ "w-full max-w-md": isAuthPage })}>
-            <AppRoutes 
-              isDarkMode={isDarkMode} 
-              activeGroup={activeGroup} 
-              activeGroupId={activeGroupId} 
-              groups={MOCK_GROUPS}
+            <AppRoutes
+              isDarkMode={isDarkMode}
+              activeGroup={activeGroup}
+              activeGroupId={activeGroupId}
+              groups={groups}
+              user={user}
               onLogin={handleLogin} // 注入登入功能
+              onUserUpdate={(updatedData) => {
+                const newUser = { ...user, ...updatedData };
+                setUser(newUser);
+                localStorage.setItem('lifehub-user', JSON.stringify(newUser));
+              }}
             />
           </section>
         </main>

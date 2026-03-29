@@ -83,6 +83,88 @@ namespace LifeHub.API.Controllers
 
             return Ok(new { group.Id, group.Name });
         }
+
+        // 邀請成員入群 (by email or account)
+        [HttpPost("{id}/invite")]
+        public async Task<IActionResult> InviteUser(int id, [FromBody] InviteUserRequest request)
+        {
+            var currentUserId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+
+            // 1. 檢查群組是否存在
+            var group = await _context.Groups.FindAsync(id);
+            if (group == null || group.IsDeleted) return NotFound("Group not found");
+
+            // 2. 檢查目前使用者是否在群組內 (至少要是在成員內才能邀請)
+            var requester = await _context.UserGroups.AnyAsync(ug => ug.GroupId == id && ug.UserId == currentUserId);
+            if (!requester) return Unauthorized("You are not part of this group");
+
+            // 3. 搜尋目標使用者
+            var targetUser = await _context.Users.FirstOrDefaultAsync(u => 
+                (u.Email == request.SearchTerm || u.LoginAccount == request.SearchTerm) && !u.IsDeleted);
+            
+            if (targetUser == null) return NotFound("Target user not found");
+
+            // 4. 檢查目標是否已在群組
+            var existing = await _context.UserGroups.AnyAsync(ug => ug.GroupId == id && ug.UserId == targetUser.Id);
+            if (existing) return BadRequest("User is already in the group");
+
+            // 5. 加入群組
+            _context.UserGroups.Add(new UserGroup { UserId = targetUser.Id, GroupId = id, Role = GroupRole.Member });
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"Successfully invited {targetUser.Username} to the group" });
+        }
+
+        // 退出群組
+        [HttpDelete("{id}/leave")]
+        public async Task<IActionResult> LeaveGroup(int id)
+        {
+            var userId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+
+            var userGroup = await _context.UserGroups.FirstOrDefaultAsync(ug => ug.GroupId == id && ug.UserId == userId);
+            if (userGroup == null) return NotFound("You are not in this group");
+
+            _context.UserGroups.Remove(userGroup);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "You have left the group" });
+        }
+
+        // 取得單一群組詳細資訊 (包含成員列表)
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetGroupDetail(int id)
+        {
+            var userId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+
+            // 檢查使用者是否在該群組
+            var isMember = await _context.UserGroups.AnyAsync(ug => ug.GroupId == id && ug.UserId == userId);
+            if (!isMember) return StatusCode(403, "You are not part of this group");
+
+            var group = await _context.Groups
+                .Where(g => g.Id == id && !g.IsDeleted)
+                .Select(g => new
+                {
+                    g.Id,
+                    g.Name,
+                    g.Description,
+                    g.InviteCode,
+                    Members = _context.UserGroups
+                        .Where(ug => ug.GroupId == g.Id)
+                        .Select(ug => new
+                        {
+                            Id = ug.UserId,
+                            Name = ug.User!.Username,
+                            Role = ug.Role.ToString(),
+                            Avatar = ug.User.AvatarUrl
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            if (group == null) return NotFound("Group not found");
+
+            return Ok(group);
+        }
     }
 }
 

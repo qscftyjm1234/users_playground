@@ -1,18 +1,20 @@
 import React from 'react';
 import { useLocation, matchPath } from 'react-router-dom';
+import { User } from 'lucide-react';
 import { routesConfig } from '../../routes/config';
 import { cn } from '../../lib/utils';
 
 export default function Header({ isDarkMode, activeGroup, user }) {
   const location = useLocation();
   const currentPath = location.pathname;
+  const [imgError, setImgError] = React.useState(false);
 
   // 用遞迴尋找目前路由配置
   const findActiveRoute = (routes, parentPath = '') => {
     for (const route of routes) {
       // 組合路徑，確保處理巢狀路徑的前綴
-      const fullPath = route.path.startsWith('/') 
-        ? route.path 
+      const fullPath = route.path.startsWith('/')
+        ? route.path
         : `${parentPath}/${route.path}`.replace(/\/+/g, '/');
 
       // 使用 react-router-dom 的 matchPath 進行動態路徑匹配
@@ -32,7 +34,7 @@ export default function Header({ isDarkMode, activeGroup, user }) {
   const activeRoute = findActiveRoute(routesConfig);
 
   // 處理標題顯示：若是群組相關則替換名稱
-  const displayTitle = activeRoute?.title?.includes('群組') 
+  const displayTitle = activeRoute?.title?.includes('群組')
     ? activeRoute.title.replace('群組', activeGroup?.name || '群組')
     : activeRoute?.title;
 
@@ -56,8 +58,19 @@ export default function Header({ isDarkMode, activeGroup, user }) {
             </p>
             <p className="text-xs text-slate-500 font-medium">{user.email}</p>
           </div>
-          <div className="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-blue-600/20 shadow-lg cursor-pointer hover:ring-blue-600 transition-all active:scale-95">
-            <img src={user.avatar} alt="user avatar" className="w-full h-full object-cover" />
+          <div className="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-blue-600/20 shadow-lg cursor-pointer hover:ring-blue-600 transition-all active:scale-95 flex items-center justify-center bg-blue-100">
+            {user.avatarUrl && !imgError ? (
+              <img 
+                src={user.avatarUrl} 
+                alt="user avatar" 
+                className="w-full h-full object-cover" 
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <span className="text-blue-600 font-black text-lg uppercase">
+                {user.username ? user.username[0] : '?'}
+              </span>
+            )}
           </div>
         </div>
       )}

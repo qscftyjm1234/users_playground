@@ -1,20 +1,44 @@
-import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Plus, MapPin, Clock, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar as CalendarIcon, Plus, MapPin, Clock, ChevronLeft, ChevronRight, X, Loader2, Trash2 } from 'lucide-react';
+import { message, Popconfirm } from 'antd';
 import { cn } from '../../lib/utils';
 import Input from '../../components/uiInterface/Input';
+import groupDetailApi from '../../api/groupDetailApi';
+import dayjs from 'dayjs';
 
-export default function CalendarPage({ isDarkMode, groupData }) {
+export default function CalendarPage({ isDarkMode, groupData, groupId }) {
+  const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [events, setEvents] = useState([
-    { id: 1, title: '小明生日聚餐', date: '2026-03-28', time: '18:00', location: '『星聚點 KTV』', type: 'Party' },
-    { id: 2, title: '每月大掃除', date: '2026-03-29', time: '10:00', location: '『家裡內部』', type: 'Chore' },
-    { id: 3, title: '繳交電費截止', date: '2026-03-25', time: '23:59', location: '『線上繳費』', type: 'Payment' }
-  ]);
+  const [events, setEvents] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const [newEvent, setNewEvent] = useState({
     title: '', date: '', time: '', location: '', type: 'Activity'
   });
+
+  // 1. Fetch data
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const res = await groupDetailApi.events.getAll(groupId);
+      // Map backend dates
+      setEvents(res.data.map(e => ({
+        ...e,
+        date: dayjs(e.date).format('YYYY-MM-DD'),
+        time: dayjs(e.date).format('HH:mm'),
+        type: 'Activity' // Backend currently doesn't store type, defaulting to Activity
+      })));
+    } catch (err) {
+      message.error('無法載入行程');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (groupId) fetchData();
+  }, [groupId]);
 
   // Calendar logic
   const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -43,12 +67,38 @@ export default function CalendarPage({ isDarkMode, groupData }) {
     }
   };
 
-  const handleAddEvent = (e) => {
+  const handleAddEvent = async (e) => {
     e.preventDefault();
     if (!newEvent.title || !newEvent.date) return;
-    setEvents([...events, { ...newEvent, id: Date.now() }]);
-    setIsModalOpen(false);
-    setNewEvent({ title: '', date: '', time: '', location: '', type: 'Activity' });
+    
+    try {
+      setSubmitting(true);
+      const combinedDate = dayjs(`${newEvent.date} ${newEvent.time || '00:00'}`).toISOString();
+      await groupDetailApi.events.create(groupId, {
+        title: newEvent.title,
+        description: '',
+        date: combinedDate,
+        location: newEvent.location
+      });
+      message.success('行程已建立');
+      setIsModalOpen(false);
+      setNewEvent({ title: '', date: '', time: '', location: '', type: 'Activity' });
+      fetchData();
+    } catch (err) {
+      message.error('建立失敗');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await groupDetailApi.events.delete(groupId, id);
+      message.success('行程已刪除');
+      fetchData();
+    } catch (err) {
+      message.error('刪除失敗');
+    }
   };
 
   return (
@@ -56,7 +106,7 @@ export default function CalendarPage({ isDarkMode, groupData }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className={cn("text-2xl font-black", { "text-white": isDarkMode, "text-slate-900": !isDarkMode })}>群組共用行事曆</h2>
-          <p className="text-sm text-slate-500 font-medium">{groupData?.name} 的生活行程</p>
+          <p className="text-sm text-slate-500 font-medium">看大家即將到來的共同生活行程</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -96,7 +146,12 @@ export default function CalendarPage({ isDarkMode, groupData }) {
           </div>
 
           <div className="grid grid-cols-7 gap-px bg-slate-100 dark:bg-slate-800 rounded-3xl overflow-hidden border border-slate-100 dark:border-slate-800">
-            {days.map((day, i) => {
+            {loading ? (
+               <div className="col-span-7 h-[600px] flex flex-col items-center justify-center opacity-30">
+                  <Loader2 className="animate-spin text-blue-500 mb-4" size={48} />
+                  <p className="font-bold tracking-widest text-xs uppercase">行程加載中...</p>
+               </div>
+            ) : days.map((day, i) => {
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               const dayEvents = events.filter(e => e.date === dateStr);
               const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
@@ -154,27 +209,36 @@ export default function CalendarPage({ isDarkMode, groupData }) {
         <div className="space-y-6">
           <h3 className={cn("text-lg font-bold px-2", { "text-white": isDarkMode, "text-slate-900": !isDarkMode })}>即將到來</h3>
           <div className="space-y-4">
+            {events.length === 0 && !loading && (
+              <p className="px-5 text-sm font-bold text-slate-400 italic">目前沒有任何行程</p>
+            )}
             {events
               .filter(e => new Date(e.date) >= new Date().setHours(0,0,0,0))
               .sort((a, b) => new Date(a.date) - new Date(b.date))
               .map(ev => (
                 <div key={ev.id} className={cn(
-                  "p-5 rounded-3xl border shadow-sm transition hover:shadow-md hover:border-blue-400",
+                  "p-5 rounded-3xl border shadow-sm transition hover:shadow-md hover:border-blue-400 relative group",
                   { "bg-slate-900 border-slate-800": isDarkMode, "bg-white border-slate-100": !isDarkMode }
                 )}>
                   <div className="flex justify-between items-start mb-4">
                     <h4 className={cn("font-black text-sm", { "text-white": isDarkMode, "text-slate-900": !isDarkMode })}>{ev.title}</h4>
-                    <div className={cn("w-2 h-2 rounded-full", getTypeColor(ev.type))} />
+                    <Popconfirm title="刪除行程？" onConfirm={() => handleDelete(ev.id)} okText="刪" cancelText="否">
+                      <button className="opacity-0 group-hover:opacity-100 transition text-rose-500 p-1">
+                        <Trash2 size={14} />
+                      </button>
+                    </Popconfirm>
                   </div>
                   <div className="space-y-2 text-[11px] font-bold text-slate-500">
                     <div className="flex items-center gap-2">
                       <Clock size={12} className="text-blue-500" />
                       {ev.date} {ev.time}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={12} className="text-emerald-500" />
-                      {ev.location}
-                    </div>
+                    {ev.location && (
+                      <div className="flex items-center gap-2">
+                        <MapPin size={12} className="text-emerald-500" />
+                        {ev.location}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -192,44 +256,33 @@ export default function CalendarPage({ isDarkMode, groupData }) {
           )}>
             <div className="flex justify-between items-center mb-8">
               <h2 className={cn("text-2xl font-black", { "text-white": isDarkMode, "text-slate-900": !isDarkMode })}>新增行程</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition text-slate-400">
+              <button 
+                onClick={() => setIsModalOpen(false)} 
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition text-slate-400"
+              >
                 <X size={24} />
               </button>
             </div>
 
             <form onSubmit={handleAddEvent} className="space-y-5">
-              <Input label="行程名稱" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} placeholder="例如：大掃除、好友聚餐" />
+              <Input 
+                label="行程名稱" 
+                value={newEvent.title} 
+                onChange={e => setNewEvent({...newEvent, title: e.target.value})} 
+                placeholder="例如：大掃除、好友聚餐" 
+                required
+              />
               <div className="grid grid-cols-2 gap-4">
-                <Input type="date" label="日期" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} />
+                <Input type="date" label="日期" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} required/>
                 <Input type="time" label="時間" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} />
               </div>
               <Input label="地點" value={newEvent.location} onChange={e => setNewEvent({...newEvent, location: e.target.value})} placeholder="在哪個地方？" />
-              <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">行程類型</label>
-                <div className="flex flex-wrap gap-2">
-                  {['Activity', 'Party', 'Chore', 'Payment'].map(t => {
-                    const isActive = newEvent.type === t;
-                    return (
-                      <button 
-                        key={t}
-                        type="button"
-                        onClick={() => setNewEvent({...newEvent, type: t})}
-                        className={cn(
-                          "px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                          {
-                            "bg-blue-600 text-white shadow-md scale-105": isActive,
-                            "bg-slate-800 text-slate-400": !isActive && isDarkMode,
-                            "bg-slate-50 text-slate-500": !isActive && !isDarkMode
-                          }
-                        )}
-                      >
-                        {t === 'Activity' ? '一般活動' : t === 'Party' ? '聚會' : t === 'Chore' ? '家事' : '繳款'}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <button className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all active:scale-95 mt-4">
+              
+              <button 
+                disabled={submitting}
+                className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all active:scale-95 mt-4 flex items-center justify-center gap-2"
+              >
+                {submitting ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
                 確認新增行程
               </button>
             </form>

@@ -54,6 +54,23 @@ namespace LifeHub.API.Controllers
 
             return Ok(new { message = "Memo created", memoId = memo.Id });
         }
+
+        [HttpDelete("{memoId}")]
+        public async Task<IActionResult> DeleteMemo(int groupId, int memoId)
+        {
+            var userId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+            var inGroup = await _context.UserGroups.AnyAsync(ug => ug.GroupId == groupId && ug.UserId == userId);
+            if (!inGroup) return Forbid();
+
+            var memo = await _context.Memos.FirstOrDefaultAsync(m => m.Id == memoId && m.GroupId == groupId && !m.IsDeleted);
+            if (memo == null) return NotFound("Memo not found");
+
+            memo.IsDeleted = true;
+            memo.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Memo deleted" });
+        }
     }
 
     public class CreateMemoRequest

@@ -1,4 +1,6 @@
 import { Navigate } from 'react-router-dom';
+import AdminRoute from './AdminRoute';
+import React from 'react';
 
 // Pages - 使用 lazy loading 可以大幅優化首載效能（目前先採直接匯入以確保修復）
 import AuthPage from '../pages/Auth/AuthPage';
@@ -52,9 +54,15 @@ export const routesConfig = [
   },
   {
     path: '/admin',
-    element: <AdminPage />,
-    title: '系統管理後台',
-    description: '系統運行監控與全站數據統計'
+    element: <AdminRoute />,
+    children: [
+      {
+        path: '',
+        element: <AdminPage />,
+        title: '系統管理員控制台',
+        description: '全站使用者管理與系統運行監控'
+      }
+    ]
   },
   // 針對特定群組的巢狀路由
   {

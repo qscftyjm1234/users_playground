@@ -56,6 +56,23 @@ namespace LifeHub.API.Controllers
 
             return Ok(new { message = "Event created", eventId = ev.Id });
         }
+
+        [HttpDelete("{eventId}")]
+        public async Task<IActionResult> DeleteEvent(int groupId, int eventId)
+        {
+            var userId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+            var inGroup = await _context.UserGroups.AnyAsync(ug => ug.GroupId == groupId && ug.UserId == userId);
+            if (!inGroup) return Forbid();
+
+            var ev = await _context.Events.FirstOrDefaultAsync(e => e.Id == eventId && e.GroupId == groupId && !e.IsDeleted);
+            if (ev == null) return NotFound("Event not found");
+
+            ev.IsDeleted = true;
+            ev.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Event deleted" });
+        }
     }
 
     public class CreateEventRequest

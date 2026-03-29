@@ -80,9 +80,51 @@ namespace LifeHub.API.Controllers
             if (task == null) return NotFound();
 
             task.Status = (LifeHub.Domain.Entities.TaskStatus)request.Status;
+            task.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Status updated" });
+        }
+
+        [HttpPut("{taskId}")]
+        public async Task<IActionResult> UpdateTask(int groupId, int taskId, [FromBody] UpdateTaskRequest request)
+        {
+            var userId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+            var inGroup = await _context.UserGroups.AnyAsync(ug => ug.GroupId == groupId && ug.UserId == userId);
+            if (!inGroup) return Forbid();
+
+            var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId && t.GroupId == groupId);
+            if (task == null) return NotFound();
+
+            task.Title = request.Title ?? task.Title;
+            task.Description = request.Description ?? task.Description;
+            task.AssignedToUserId = request.AssignedToUserId ?? task.AssignedToUserId;
+            task.DueDate = request.DueDate ?? task.DueDate;
+            if (request.Status.HasValue)
+            {
+                task.Status = (LifeHub.Domain.Entities.TaskStatus)request.Status.Value;
+            }
+            task.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Task updated" });
+        }
+
+        [HttpDelete("{taskId}")]
+        public async Task<IActionResult> DeleteTask(int groupId, int taskId)
+        {
+            var userId = int.Parse(User.FindFirst("userId")?.Value ?? "0");
+            var inGroup = await _context.UserGroups.AnyAsync(ug => ug.GroupId == groupId && ug.UserId == userId);
+            if (!inGroup) return Forbid();
+
+            var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == taskId && t.GroupId == groupId);
+            if (task == null) return NotFound();
+
+            task.IsDeleted = true;
+            task.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Task deleted" });
         }
     }
 }

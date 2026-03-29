@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ namespace LifeHub.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize] // 🔒 修正：必須登入才能查閱操作記錄
     public class AuditLogsController : ControllerBase
     {
         private readonly IAuditLogRepository _repository;

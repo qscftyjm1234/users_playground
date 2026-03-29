@@ -37,23 +37,42 @@ namespace LifeHub.API.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            // 檢查帳號重複
-            if (await _context.Users.AnyAsync(u => u.LoginAccount == request.LoginAccount))
-                return BadRequest("Account ID already exists");
-
-            var user = new User
+            try 
             {
-                LoginAccount = request.LoginAccount,
-                Username = request.Username,
-                PasswordHash = HashPassword(request.Password), 
-                Role = UserRole.User 
-            };
+                Console.WriteLine($"[DEBUG] Register Request: {System.Text.Json.JsonSerializer.Serialize(request)}");
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+                // 檢查帳號重複
+                if (await _context.Users.AnyAsync(u => u.LoginAccount == request.LoginAccount))
+                    return BadRequest("Account ID already exists");
 
-            var token = _jwtGenerator.GenerateToken(user);
-            return Ok(new AuthResponse { Token = token, Username = user.Username, Email = user.Email, Role = user.Role.ToString() });
+                var user = new User
+                {
+                    LoginAccount = request.LoginAccount,
+                    Username = request.Username,
+                    PasswordHash = HashPassword(request.Password), 
+                    Role = UserRole.User 
+                };
+
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+
+                var token = _jwtGenerator.GenerateToken(user);
+                return Ok(new AuthResponse 
+                { 
+                    Token = token, 
+                    Username = user.Username, 
+                    Email = user.Email ?? string.Empty, // 處理 null，避免出錯
+                    Role = user.Role.ToString() 
+                });
+            }
+            catch (Exception ex)
+            {
+                // 這行會在 Docker Log 噴出詳細錯誤
+                Console.WriteLine($"[ERROR] Register failed: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                
+                return StatusCode(500, $"後端錯誤: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -65,13 +84,33 @@ namespace LifeHub.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.LoginAccount == request.LoginAccount);
-            
-            if (user == null || user.PasswordHash != HashPassword(request.Password))
-                return Unauthorized("Invalid credentials");
+            try 
+            {
+                Console.WriteLine($"[DEBUG] 登入: {request.LoginAccount}");
 
-            var token = _jwtGenerator.GenerateToken(user);
-            return Ok(new AuthResponse { Token = token, Username = user.Username, Email = user.Email, Role = user.Role.ToString() });
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.LoginAccount == request.LoginAccount);
+                
+                if (user == null || user.PasswordHash != HashPassword(request.Password))
+                {
+                    Console.WriteLine($"[DEBUG] Login failed for: {request.LoginAccount}");
+                    return Unauthorized("Invalid credentials");
+                }
+
+                var token = _jwtGenerator.GenerateToken(user);
+                return Ok(new AuthResponse 
+                { 
+                    Token = token, 
+                    Username = user.Username, 
+                    Email = user.Email ?? string.Empty, 
+                    Role = user.Role.ToString() 
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] 登入後端錯誤: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                return StatusCode(500, $"登入後端錯誤: {ex.Message}");
+            }
         }
 
         /// <summary>

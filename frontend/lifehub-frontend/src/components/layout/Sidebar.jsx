@@ -16,7 +16,7 @@ import {
 import { cn } from '../../lib/utils';
 import SidebarItem from './SidebarItem';
 
-export default function Sidebar({ isDarkMode, setIsDarkMode, activeGroup, isGroupContext, onLogout }) {
+export default function Sidebar({ isDarkMode, setIsDarkMode, activeGroup, isGroupContext, onLogout, user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -26,7 +26,11 @@ export default function Sidebar({ isDarkMode, setIsDarkMode, activeGroup, isGrou
   const isSettings = currentPath.startsWith('/settings');
   const isAdmin = currentPath.startsWith('/admin');
 
+  // 檢查是否為管理員
+  const isUserAdmin = user && (user.role === 'SystemAdmin' || user.role === 1);
+
   // Group specific paths
+  // ... (previous logic)
   const activeGroupId = activeGroup?.id;
   const isGroupDashboard = activeGroupId && (currentPath === `/groups/${activeGroupId}`);
   const isExpenses = currentPath.includes('/expenses');
@@ -74,7 +78,9 @@ export default function Sidebar({ isDarkMode, setIsDarkMode, activeGroup, isGrou
           系統與設定
         </div>
         <SidebarItem icon={Settings} label="個人設定" active={isSettings} onClick={() => navigate('/settings')} isDarkMode={isDarkMode} />
-        <SidebarItem icon={ShieldCheck} label="後台管理" active={isAdmin} onClick={() => navigate('/admin')} isDarkMode={isDarkMode} />
+        {isUserAdmin && (
+          <SidebarItem icon={ShieldCheck} label="後台管理" active={isAdmin} onClick={() => navigate('/admin')} isDarkMode={isDarkMode} />
+        )}
       </nav>
 
       <div className="mt-auto pt-6 border-t border-slate-100 dark:border-slate-800">
