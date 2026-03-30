@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS `__EFMigrationsHistory` (
+CREATE TABLE IF NOT EXISTS `__EFMigrationsHistory` (
     `MigrationId` varchar(150) CHARACTER SET utf8mb4 NOT NULL,
     `ProductVersion` varchar(32) CHARACTER SET utf8mb4 NOT NULL,
     CONSTRAINT `PK___EFMigrationsHistory` PRIMARY KEY (`MigrationId`)
@@ -8,7 +8,7 @@ START TRANSACTION;
 
 ALTER DATABASE CHARACTER SET utf8mb4;
 
-CREATE TABLE `AuditLogs` (
+CREATE TABLE IF NOT EXISTS `AuditLogs` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `EntityName` longtext CHARACTER SET utf8mb4 NOT NULL,
     `EntityId` int NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE `AuditLogs` (
     CONSTRAINT `PK_AuditLogs` PRIMARY KEY (`Id`)
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `Groups` (
+CREATE TABLE IF NOT EXISTS `Groups` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `Name` longtext CHARACTER SET utf8mb4 NOT NULL,
     `Description` longtext CHARACTER SET utf8mb4 NULL,
@@ -32,7 +32,7 @@ CREATE TABLE `Groups` (
     CONSTRAINT `PK_Groups` PRIMARY KEY (`Id`)
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `Users` (
+CREATE TABLE IF NOT EXISTS `Users` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `LoginAccount` varchar(255) CHARACTER SET utf8mb4 NOT NULL,
     `Username` longtext CHARACTER SET utf8mb4 NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE `Users` (
     CONSTRAINT `PK_Users` PRIMARY KEY (`Id`)
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `Events` (
+CREATE TABLE IF NOT EXISTS `Events` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `GroupId` int NOT NULL,
     `Title` longtext CHARACTER SET utf8mb4 NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE `Events` (
     CONSTRAINT `FK_Events_Groups_GroupId` FOREIGN KEY (`GroupId`) REFERENCES `Groups` (`Id`) ON DELETE CASCADE
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `Memos` (
+CREATE TABLE IF NOT EXISTS `Memos` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `GroupId` int NOT NULL,
     `Content` longtext CHARACTER SET utf8mb4 NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE `Memos` (
     CONSTRAINT `FK_Memos_Groups_GroupId` FOREIGN KEY (`GroupId`) REFERENCES `Groups` (`Id`) ON DELETE CASCADE
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `Expenses` (
+CREATE TABLE IF NOT EXISTS `Expenses` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `GroupId` int NOT NULL,
     `PaidByUserId` int NOT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE `Expenses` (
     CONSTRAINT `FK_Expenses_Users_PaidByUserId` FOREIGN KEY (`PaidByUserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `Tasks` (
+CREATE TABLE IF NOT EXISTS `Tasks` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `GroupId` int NOT NULL,
     `Title` longtext CHARACTER SET utf8mb4 NOT NULL,
@@ -104,7 +104,7 @@ CREATE TABLE `Tasks` (
     CONSTRAINT `FK_Tasks_Users_AssignedToUserId` FOREIGN KEY (`AssignedToUserId`) REFERENCES `Users` (`Id`)
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `UserGroups` (
+CREATE TABLE IF NOT EXISTS `UserGroups` (
     `UserId` int NOT NULL,
     `GroupId` int NOT NULL,
     `Role` int NOT NULL,
@@ -114,7 +114,7 @@ CREATE TABLE `UserGroups` (
     CONSTRAINT `FK_UserGroups_Users_UserId` FOREIGN KEY (`UserId`) REFERENCES `Users` (`Id`) ON DELETE CASCADE
 ) CHARACTER SET=utf8mb4;
 
-CREATE TABLE `ExpenseShares` (
+CREATE TABLE IF NOT EXISTS `ExpenseShares` (
     `Id` int NOT NULL AUTO_INCREMENT,
     `ExpenseId` int NOT NULL,
     `UserId` int NOT NULL,
