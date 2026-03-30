@@ -1,22 +1,127 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using LifeHub.Infrastructure.Data;
+using LifeHub.Application.Interfaces;
+using LifeHub.Infrastructure.Repositories;
+using LifeHub.Infrastructure.Authentication;
+using LifeHub.Infrastructure.Services;
+using LifeHub.API.Middleware;
+
+// --- STEP-BY-STEP RECOVERY: PHASE 2 (ADD CORE SERVICES) ---
+Console.WriteLine("================================================================");
+Console.WriteLine("[PHASE 2] STARTING RECOVERY SERVER...");
+Console.WriteLine("================================================================");
+
 var builder = WebApplication.CreateBuilder(args);
 
-// 極簡服務：確保連 Swagger 都不會報錯
+// 1. Add Services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// 2. Database Configuration - ULTIMATE ROBUST MODE
+var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
+           ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
+           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
+           ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+
+string? connectionString = null;
+if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
+{
+    try
+    {
+        var uri = new Uri(rawUrl);
+        var userInfo = uri.UserInfo.Split(':');
+        var user = userInfo[0];
+        var password = userInfo.Length > 1 ? userInfo[1] : "";
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 3306;
+        var database = uri.AbsolutePath.TrimStart('/');
+        connectionString = $"Server={host};Port={port};Database={database};User={user};Password={password};SslMode=None;AllowPublicKeyRetrieval=True;";
+    } catch { }
+}
+else if (!string.IsNullOrEmpty(rawUrl)) { connectionString = rawUrl; }
+
+// Use dummy if still null to prevent startup crash (502)
+if (string.IsNullOrEmpty(connectionString))
+{
+    Console.WriteLine("[DB CONFIG] Using Dummy connection string.");
+    connectionString = "Server=none;Database=none;User=none;Password=none;";
+}
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    var serverVer = new MySqlServerVersion(new Version(8, 0, 0));
+    options.UseMySql(connectionString, serverVer, mysqlOptions => 
+    {
+        mysqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null);
+    });
+});
+
+// 3. DI & Auth
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IAuditLogger, AuditLogger>();
+builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        };
+    });
+
+// 5. CORS - Allow all for now to aid debugging
+builder.Services.AddCors(o => o.AddPolicy("AllowReactApp", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+
 var app = builder.Build();
 
-// 極簡路由
-app.MapGet("/", () => "LifeHub Backend is ALIVE (Naked Mode)");
+// --- TEST ENDPOINTS ---
+app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 2]");
+app.MapGet("/health", () => $"LifeHub Core [Phase 2] Time: {DateTime.Now}");
 app.MapGet("/ping", () => "PONG");
+
+app.UseSwagger();
+app.UseSwaggerUI(c => {
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 2 RECOVERY)");
+    c.RoutePrefix = "swagger";
+});
+
+// --- Non-Blocking Background Migration ---
+Task.Run(() => {
+    using (var scope = app.Services.CreateScope())
+    {
+        try 
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Console.WriteLine("[ASYNC-INFO] Starting Migration in background...");
+            db.Database.Migrate();
+            Console.WriteLine("[ASYNC-INFO] Migration SUCCESS.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ASYNC-ERROR] Migration FAILED: {ex.Message}");
+        }
+    }
+});
+
+// --- Pipeline ---
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseCors("AllowReactApp");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
-// 診斷日誌
+// [FIX 502] Log Port and listen
 var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine("================================================================");
-Console.WriteLine($"[START] Naked Server is booting on PORT: {port}");
-Console.WriteLine("================================================================");
-
-// 強制綁定 0.0.0.0 並聽從傳入的 PORT
-app.Run($"http://0.0.0.0:{port}");
+Console.WriteLine($"[DEPLOY] Server starting on PORT: {port}");
+app.Run();
