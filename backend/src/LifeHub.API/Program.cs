@@ -18,12 +18,25 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // 2. Database Configuration - ULTIMATE ROBUST MODE
+Console.WriteLine("----------------------------------------------------------------");
+Console.WriteLine("[DEBUG] Available Environment Variables (DB-related):");
+foreach (System.Collections.DictionaryEntry de in Environment.GetEnvironmentVariables())
+{
+    string key = de.Key.ToString();
+    if (key.Contains("MYSQL", StringComparison.OrdinalIgnoreCase) || 
+        key.Contains("DATABASE", StringComparison.OrdinalIgnoreCase) ||
+        key.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine($"[DEBUG] Key: {key}");
+    }
+}
+
 string? connectionString = null;
 var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
-           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL");
+           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
+           ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
 
-Console.WriteLine("----------------------------------------------------------------");
 if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
 {
     Console.WriteLine("[DB CONFIG] Detected mysql:// URL format. Parsing...");
@@ -45,19 +58,23 @@ if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
         Console.WriteLine($"[DB CONFIG] Parse ERROR: {ex.Message}");
     }
 }
+else if (!string.IsNullOrEmpty(rawUrl))
+{
+    connectionString = rawUrl;
+    Console.WriteLine("[DB CONFIG] Using raw connection string from environment.");
+}
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
-                    ?? builder.Configuration.GetConnectionString("DefaultConnection");
-    Console.WriteLine("[DB CONFIG] Using standard connection string format.");
+    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    Console.WriteLine("[DB CONFIG] Falling back to appsettings connection string.");
 }
 
 // Final Masked Log for Verification
 if (!string.IsNullOrEmpty(connectionString))
 {
     var parts = connectionString.Split(';');
-    var sb = new StringBuilder("[DB CONFIG] Final connection string segments: ");
+    var sb = new StringBuilder("[DB CONFIG] Final segments: ");
     foreach (var part in parts)
     {
         var trimmed = part.Trim();
@@ -70,10 +87,6 @@ if (!string.IsNullOrEmpty(connectionString))
     }
     Console.WriteLine(sb.ToString());
 }
-else
-{
-    Console.WriteLine("[DB CONFIG] CRITICAL: Connection string is NULL or empty after all attempts.");
-}
 Console.WriteLine("----------------------------------------------------------------");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -85,12 +98,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     });
 });
 
-// 3. Dependency Injection
+// 3. DI
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 
-// 4. Authentication
+// 4. Auth
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -121,10 +134,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Enable Swagger in PRODUCTION for final verification
+// --- Production Swagger Debug ---
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API V1 (Prod Debug)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API V1 (Railway Prod)");
     c.RoutePrefix = "swagger";
 });
 
@@ -134,21 +147,25 @@ using (var scope = app.Services.CreateScope())
     try 
     {
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Console.WriteLine("[INFO] Starting Database Migration...");
+        Console.WriteLine("[INFO] Running Migration...");
         context.Database.Migrate();
-        Console.WriteLine("[INFO] Database Migration completed successfully.");
+        Console.WriteLine("[INFO] Migration SUCCESS.");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[ERROR] Database Migration failed: {ex.Message}");
+        Console.WriteLine($"[ERROR] Migration FAILED: {ex.Message}");
     }
 }
 
-// --- Middleware Pipeline ---
+// --- Pipeline ---
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-app.Run();
+// ----------------------------------------------------------------
+// [FIX 502] Support Railway dynamic PORT
+var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
+Console.WriteLine($"[DEPLOY] Server starting on PORT: {port}");
+app.Run($"http://0.0.0.0:{port}");
