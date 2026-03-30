@@ -29,10 +29,41 @@ builder.Services.AddSwaggerGen();
 
 // 2. 鞈?摨恍?蝵?- 雿輻 MySQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+// [DIAGNOSTIC] Log connection info (masked)
+if (!string.IsNullOrEmpty(connectionString))
+{
+    var parts = connectionString.Split(';');
+    var sb = new StringBuilder("[DB CONFIG] Attempting to connect to: ");
+    foreach (var part in parts)
+    {
+        var trimmed = part.Trim();
+        if (trimmed.StartsWith("Server=", StringComparison.OrdinalIgnoreCase) || 
+            trimmed.StartsWith("Database=", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("Port=", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.Append(trimmed).Append("; ");
+        }
+    }
+    Console.WriteLine(sb.ToString());
+}
+else 
+{
+    Console.WriteLine("[DB CONFIG] ERROR: Connection string 'DefaultConnection' is null or empty!");
+}
 // ?餉?鞈?摨恬??迄蝟餌絞雿輻 MySQL ???閮剖?靘遣瑽?ApplicationDbContext??
 // AddDbContext ??EF Core (Entity Framework Core) ??隞園策 .NET ?????
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+{
+    var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
+    options.UseMySql(connectionString, serverVersion, mysqlOptions => 
+    {
+        mysqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 10,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    });
+});
 
 // 3. 撖虫?憿?餉? (DI 靘陷瘜典)
 // ?餉??? (Generic Repository)
