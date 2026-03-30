@@ -19,24 +19,13 @@ builder.Services.AddSwaggerGen();
 
 // 2. Database Configuration - ULTIMATE ROBUST MODE
 Console.WriteLine("----------------------------------------------------------------");
-Console.WriteLine("[DEBUG] Available Environment Variables (DB-related):");
-foreach (System.Collections.DictionaryEntry de in Environment.GetEnvironmentVariables())
-{
-    string key = de.Key.ToString();
-    if (key.Contains("MYSQL", StringComparison.OrdinalIgnoreCase) || 
-        key.Contains("DATABASE", StringComparison.OrdinalIgnoreCase) ||
-        key.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase))
-    {
-        Console.WriteLine($"[DEBUG] Key: {key}");
-    }
-}
-
-string? connectionString = null;
+Console.WriteLine("[DEBUG] Checking Environment Variables...");
 var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
            ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
 
+string? connectionString = null;
 if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
 {
     Console.WriteLine("[DB CONFIG] Detected mysql:// URL format. Parsing...");
@@ -67,22 +56,22 @@ else if (!string.IsNullOrEmpty(rawUrl))
 if (string.IsNullOrEmpty(connectionString))
 {
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    Console.WriteLine("[DB CONFIG] Falling back to appsettings connection string.");
+    Console.WriteLine("[DB CONFIG] Falling back to config-based connection string.");
 }
 
-// Final Masked Log for Verification
+// Masked log
 if (!string.IsNullOrEmpty(connectionString))
 {
     var parts = connectionString.Split(';');
-    var sb = new StringBuilder("[DB CONFIG] Final segments: ");
+    var sb = new StringBuilder("[DB CONFIG] Final: ");
     foreach (var part in parts)
     {
-        var trimmed = part.Trim();
-        if (trimmed.StartsWith("Server=", StringComparison.OrdinalIgnoreCase) || 
-            trimmed.StartsWith("Database=", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("Port=", StringComparison.OrdinalIgnoreCase))
+        var t = part.Trim();
+        if (t.StartsWith("Server=", StringComparison.OrdinalIgnoreCase) || 
+            t.StartsWith("Database=", StringComparison.OrdinalIgnoreCase) ||
+            t.StartsWith("Port=", StringComparison.OrdinalIgnoreCase))
         {
-            sb.Append(trimmed).Append("; ");
+            sb.Append(t).Append("; ");
         }
     }
     Console.WriteLine(sb.ToString());
@@ -98,12 +87,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     });
 });
 
-// 3. DI
+// 3. DI & Auth (Condensed for clarity)
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
-
-// 4. Auth
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -123,39 +110,41 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // 5. CORS
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() 
                     ?? new[] { "http://localhost:3000", "http://localhost:5173" };
-
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp",
-        policy => policy.WithOrigins(allowedOrigins)
-                        .AllowAnyMethod()
-                        .AllowAnyHeader());
+    options.AddPolicy("AllowReactApp", policy => policy.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader());
 });
 
 var app = builder.Build();
 
-// --- Production Swagger Debug ---
+// --- Production Features ---
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API V1 (Railway Prod)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Railway-Prod)");
     c.RoutePrefix = "swagger";
 });
 
-// --- Auto Migration ---
-using (var scope = app.Services.CreateScope())
-{
-    try 
+// [DEBUG] Add Health Check endpoint
+app.MapGet("/health", () => "OK");
+
+// --- BACKGROUND Auto Migration ---
+// Move migration to background to avoid blocking server startup (fixes 502)
+Task.Run(() => {
+    using (var scope = app.Services.CreateScope())
     {
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Console.WriteLine("[INFO] Running Migration...");
-        context.Database.Migrate();
-        Console.WriteLine("[INFO] Migration SUCCESS.");
+        try 
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Console.WriteLine("[ASYNC-INFO] Starting Migration in background...");
+            context.Database.Migrate();
+            Console.WriteLine("[ASYNC-INFO] Migration SUCCESS.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ASYNC-ERROR] Migration FAILED: {ex.Message}");
+        }
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[ERROR] Migration FAILED: {ex.Message}");
-    }
-}
+});
 
 // --- Pipeline ---
 app.UseMiddleware<ExceptionHandlingMiddleware>();
@@ -164,8 +153,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ----------------------------------------------------------------
-// [FIX 502] Support Railway dynamic PORT
+// [FIX 502] Log Port and listen
 var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine($"[DEPLOY] Server starting on PORT: {port}");
-app.Run($"http://0.0.0.0:{port}");
+Console.WriteLine($"[DEPLOY] Listening on PORT: {port}");
+
+// On Railway, binding to 0.0.0.0 is better than localhost
+app.Run();
