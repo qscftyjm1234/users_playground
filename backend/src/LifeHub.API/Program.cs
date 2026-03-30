@@ -9,9 +9,9 @@ using LifeHub.Infrastructure.Authentication;
 using LifeHub.Infrastructure.Services;
 using LifeHub.API.Middleware;
 
-// --- FINAL HARDCODE FIX: 2026-03-30 ---
+// --- DYNAMIC RECOVERY VERSION: 2026-03-30-V5 ---
 Console.WriteLine("================================================================");
-Console.WriteLine("[FINAL FIX] BOOTING WITH HARDCODED CREDENTIALS...");
+Console.WriteLine("[PHASE 5] HYBRID CONNECTION MODE STARTING...");
 Console.WriteLine("================================================================");
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,11 +21,40 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 2. ULTIMATE HARDCODED CONNECTION STRING
-// Using the credentials you provided directly to eliminate parsing errors
-string connectionString = "Server=mysql.railway.internal;Port=3306;Database=railway;User=root;Password=qJdJWuQoRQcCKlzITqcSOKpPmzkiFbCY;SslMode=None;AllowPublicKeyRetrieval=True;";
+// 2. Database Configuration - HYBRID LOGIC
+string? connectionString = null;
 
-Console.WriteLine("[DB CONFIG] HARDCODED Connection ready (Masked Password).");
+// Try all possible Railway variables
+var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
+           ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
+           ?? Environment.GetEnvironmentVariable("MYSQL_PUBLIC_URL")
+           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL");
+
+if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
+{
+    Console.WriteLine("[DB CONFIG] Processing mysql:// URL...");
+    try
+    {
+        var uri = new Uri(rawUrl);
+        var auth = uri.UserInfo.Split(':');
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 3306;
+        var db = uri.AbsolutePath.TrimStart('/');
+        if (string.IsNullOrEmpty(db)) db = "railway";
+        
+        connectionString = $"Server={host};Port={port};Database={db};User={auth[0]};Password={(auth.Length > 1 ? auth[1] : "")};SslMode=Preferred;AllowPublicKeyRetrieval=True;";
+    }
+    catch (Exception ex) { Console.WriteLine($"[DB CONFIG] URL Parse error: {ex.Message}"); }
+}
+
+// FALLBACK: Hardcoded Internal (if parsing fails or no URL found)
+if (string.IsNullOrEmpty(connectionString))
+{
+    Console.WriteLine("[DB CONFIG] No valid URL found. Using Hardcoded Fallback.");
+    connectionString = "Server=mysql.railway.internal;Port=3306;Database=railway;User=root;Password=qJdJWuQoRQcCKlzITqcSOKpPmzkiFbCY;SslMode=Preferred;AllowPublicKeyRetrieval=True;";
+}
+
+Console.WriteLine($"[DB CONFIG] Final Host Check: {connectionString.Split(';')[0]}");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -64,12 +93,12 @@ builder.Services.AddCors(o => o.AddPolicy("AllowReactApp", p => p.AllowAnyOrigin
 var app = builder.Build();
 
 // --- TEST ENDPOINTS ---
-app.MapGet("/", () => "LifeHub Backend ALIVE [FINAL HARDCODE FIX]");
-app.MapGet("/health", () => $"UP AND RUNNING. DB CONNECTED (Hardcoded). Time: {DateTime.Now}");
+app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 5 - Hybrid]");
+app.MapGet("/health", () => $"UP AND RUNNING. Host: {connectionString.Split(';')[0]} Time: {DateTime.Now}");
 
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Final Fix)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 5)");
     c.RoutePrefix = "swagger";
 });
 
@@ -80,17 +109,14 @@ Task.Run(() => {
         try 
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            Console.WriteLine("[ASYNC] Hardcoded connection - Starting migration...");
+            Console.WriteLine("[ASYNC] Migration starting...");
             db.Database.Migrate();
-            Console.WriteLine("[ASYNC] MIGRATION SUCCESS! The system is fully operational.");
+            Console.WriteLine("[ASYNC] MIGRATION SUCCESS! Everything is ready.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine("------------------------------------------");
-            Console.WriteLine($"[ASYNC-ERROR] Hardcoded test FAILED: {ex.Message}");
-            if (ex.InnerException != null)
-                Console.WriteLine($"[INNER-REASON] {ex.InnerException.Message}");
-            Console.WriteLine("------------------------------------------");
+            Console.WriteLine($"[ASYNC-ERROR] Failed: {ex.Message}");
+            if (ex.InnerException != null) Console.WriteLine($"[INNER-REASON] {ex.InnerException.Message}");
         }
     }
 });
@@ -102,7 +128,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// [FIX 502] Explicit PORT binding for Railway
 var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine($"[DEPLOY] Server starting on PORT: {port}");
+Console.WriteLine($"[DEPLOY] Server listening on PORT: {port}");
 app.Run($"http://0.0.0.0:{port}");
