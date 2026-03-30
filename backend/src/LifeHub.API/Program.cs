@@ -17,34 +17,47 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 2. Database Configuration - DEBUG MODE
-// Logging all environment variables for diagnosis (Keys only)
+// 2. Database Configuration - ULTIMATE ROBUST MODE
+string? connectionString = null;
+var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
+           ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
+           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL");
+
 Console.WriteLine("----------------------------------------------------------------");
-Console.WriteLine("[DEBUG] Available Environment Variables (DB-related):");
-foreach (System.Collections.DictionaryEntry de in Environment.GetEnvironmentVariables())
+if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
 {
-    string key = de.Key.ToString();
-    if (key.Contains("MYSQL", StringComparison.OrdinalIgnoreCase) || 
-        key.Contains("DATABASE", StringComparison.OrdinalIgnoreCase) ||
-        key.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase))
+    Console.WriteLine("[DB CONFIG] Detected mysql:// URL format. Parsing...");
+    try
     {
-        Console.WriteLine($"[DEBUG] Key: {key}");
+        var uri = new Uri(rawUrl);
+        var userInfo = uri.UserInfo.Split(':');
+        var user = userInfo[0];
+        var password = userInfo.Length > 1 ? userInfo[1] : "";
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 3306;
+        var database = uri.AbsolutePath.TrimStart('/');
+        
+        connectionString = $"Server={host};Port={port};Database={database};User={user};Password={password};SslMode=None;AllowPublicKeyRetrieval=True;";
+        Console.WriteLine($"[DB CONFIG] Parse SUCCESS: Server={host}; Database={database}; Port={port};");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DB CONFIG] Parse ERROR: {ex.Message}");
     }
 }
-Console.WriteLine("----------------------------------------------------------------");
-
-var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
-                    ?? Environment.GetEnvironmentVariable("DATABASE_URL") 
-                    ?? builder.Configuration.GetConnectionString("DefaultConnection");
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    Console.WriteLine("[DB CONFIG] CRITICAL ERROR: Connection string is NULL or Empty!");
+    connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
+                    ?? builder.Configuration.GetConnectionString("DefaultConnection");
+    Console.WriteLine("[DB CONFIG] Using standard connection string format.");
 }
-else
+
+// Final Masked Log for Verification
+if (!string.IsNullOrEmpty(connectionString))
 {
     var parts = connectionString.Split(';');
-    var sb = new StringBuilder("[DB CONFIG] Using: ");
+    var sb = new StringBuilder("[DB CONFIG] Final connection string segments: ");
     foreach (var part in parts)
     {
         var trimmed = part.Trim();
@@ -57,6 +70,10 @@ else
     }
     Console.WriteLine(sb.ToString());
 }
+else
+{
+    Console.WriteLine("[DB CONFIG] CRITICAL: Connection string is NULL or empty after all attempts.");
+}
 Console.WriteLine("----------------------------------------------------------------");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -64,10 +81,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
     options.UseMySql(connectionString ?? "", serverVersion, mysqlOptions => 
     {
-        mysqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 3, // Reduced for faster feedback during debug
-            maxRetryDelay: TimeSpan.FromSeconds(5),
-            errorNumbersToAdd: null);
+        mysqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null);
     });
 });
 
@@ -107,11 +121,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Enable Swagger in PRODUCTION for debugging
+// Enable Swagger in PRODUCTION for final verification
 app.UseSwagger();
 app.UseSwaggerUI(c => {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API V1 (Prod Debug)");
-    c.RoutePrefix = "swagger"; // Always available at /swagger
+    c.RoutePrefix = "swagger";
 });
 
 // --- Auto Migration ---
@@ -120,21 +134,18 @@ using (var scope = app.Services.CreateScope())
     try 
     {
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Console.WriteLine("[INFO] Attempting Database Migration...");
+        Console.WriteLine("[INFO] Starting Database Migration...");
         context.Database.Migrate();
         Console.WriteLine("[INFO] Database Migration completed successfully.");
     }
     catch (Exception ex)
     {
         Console.WriteLine($"[ERROR] Database Migration failed: {ex.Message}");
-        Console.WriteLine("[DEBUG] App will CONTINUE to run so you can access Swagger.");
     }
 }
 
 // --- Middleware Pipeline ---
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-// Temporarily disable HTTPS redirection if it causes issues on Railway
-// app.UseHttpsRedirection(); 
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
