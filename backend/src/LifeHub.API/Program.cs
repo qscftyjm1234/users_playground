@@ -9,59 +9,70 @@ using LifeHub.Infrastructure.Authentication;
 using LifeHub.Infrastructure.Services;
 using LifeHub.API.Middleware;
 
-// --- DYNAMIC RECOVERY VERSION: 2026-03-30-V5 ---
+// --- PHASE 7: AUTOMATIC RAILWAY VARIABLE DETECTION ---
 Console.WriteLine("================================================================");
-Console.WriteLine("[PHASE 5] HYBRID CONNECTION MODE STARTING...");
+Console.WriteLine("[PHASE 7] AUTO-DETECTING RAILWAY DB CREDENTIALS...");
 Console.WriteLine("================================================================");
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Core Services
+// 1. Core
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 2. Database Configuration - HYBRID LOGIC
+// 2. ULTIMATE AUTO-DETECT LOGIC
 string? connectionString = null;
 
-// Try all possible Railway variables
-var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
-           ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
-           ?? Environment.GetEnvironmentVariable("MYSQL_PUBLIC_URL")
-           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL");
+// A. Try building from individual pieces (most reliable in Railway internal/external)
+var user = Environment.GetEnvironmentVariable("MYSQLUSER") ?? "root";
+var pass = Environment.GetEnvironmentVariable("MYSQL_ROOT_PASSWORD") 
+        ?? Environment.GetEnvironmentVariable("MYSQLPASSWORD") 
+        ?? "qJdJWuQoRQcCKlzITqcSOKpPmzkiFbCY";
+var host = Environment.GetEnvironmentVariable("RAILWAY_TCP_PROXY_DOMAIN") // Public
+        ?? Environment.GetEnvironmentVariable("MYSQLHOST")                // Local/Private
+        ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_DOMAIN");
+var port = Environment.GetEnvironmentVariable("RAILWAY_TCP_PROXY_PORT")   // Public
+        ?? Environment.GetEnvironmentVariable("MYSQLPORT")                // Local
+        ?? "3306";
+var db = Environment.GetEnvironmentVariable("MYSQL_DATABASE") 
+      ?? Environment.GetEnvironmentVariable("MYSQLDATABASE") 
+      ?? "railway";
 
-if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
+if (!string.IsNullOrEmpty(host))
 {
-    Console.WriteLine("[DB CONFIG] Processing mysql:// URL...");
-    try
-    {
-        var uri = new Uri(rawUrl);
-        var auth = uri.UserInfo.Split(':');
-        var host = uri.Host;
-        var port = uri.Port > 0 ? uri.Port : 3306;
-        var db = uri.AbsolutePath.TrimStart('/');
-        if (string.IsNullOrEmpty(db)) db = "railway";
-        
-        connectionString = $"Server={host};Port={port};Database={db};User={auth[0]};Password={(auth.Length > 1 ? auth[1] : "")};SslMode=Preferred;AllowPublicKeyRetrieval=True;";
-    }
-    catch (Exception ex) { Console.WriteLine($"[DB CONFIG] URL Parse error: {ex.Message}"); }
+    Console.WriteLine($"[AUTO-DETECT] Found pieces! Host={host}; Port={port}; Database={db}");
+    connectionString = $"Server={host};Port={port};Database={db};User={user};Password={pass};SslMode=Preferred;AllowPublicKeyRetrieval=True;";
 }
 
-// FALLBACK: Hardcoded Internal (if parsing fails or no URL found)
+// B. Fallback to DATABASE_URL if pieces were missing
 if (string.IsNullOrEmpty(connectionString))
 {
-    Console.WriteLine("[DB CONFIG] No valid URL found. Using Hardcoded Fallback.");
-    connectionString = "Server=mysql.railway.internal;Port=3306;Database=railway;User=root;Password=qJdJWuQoRQcCKlzITqcSOKpPmzkiFbCY;SslMode=Preferred;AllowPublicKeyRetrieval=True;";
+    var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") ?? Environment.GetEnvironmentVariable("MYSQL_URL");
+    if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
+    {
+        try {
+            var uri = new Uri(rawUrl);
+            var auth = uri.UserInfo.Split(':');
+            connectionString = $"Server={uri.Host};Port={(uri.Port > 0 ? uri.Port : 3306)};Database={(uri.AbsolutePath.TrimStart('/') == "" ? "railway" : uri.AbsolutePath.TrimStart('/'))};User={auth[0]};Password={(auth.Length > 1 ? auth[1] : "")};SslMode=Preferred;AllowPublicKeyRetrieval=True;";
+            Console.WriteLine("[AUTO-DETECT] Parsed from DATABASE_URL.");
+        } catch { }
+    }
 }
 
-Console.WriteLine($"[DB CONFIG] Final Host Check: {connectionString.Split(';')[0]}");
+// C. Final Fallback (Hardcoded)
+if (string.IsNullOrEmpty(connectionString))
+{
+    Console.WriteLine("[AUTO-DETECT] WARNING: Using Final Fallback.");
+    connectionString = "Server=mysql.railway.internal;Port=3306;Database=railway;User=root;Password=qJdJWuQoRQcCKlzITqcSOKpPmzkiFbCY;SslMode=Preferred;AllowPublicKeyRetrieval=True;";
+}
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     var serverVer = new MySqlServerVersion(new Version(8, 0, 0));
     options.UseMySql(connectionString, serverVer, mysqlOptions => 
     {
-        mysqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+        mysqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null);
     });
 });
 
@@ -87,41 +98,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// 5. CORS
 builder.Services.AddCors(o => o.AddPolicy("AllowReactApp", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 var app = builder.Build();
 
-// --- TEST ENDPOINTS ---
-app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 5 - Hybrid]");
-app.MapGet("/health", () => $"UP AND RUNNING. Host: {connectionString.Split(';')[0]} Time: {DateTime.Now}");
+app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 7 - AUTO-PIECES]");
+app.MapGet("/health", () => $"ALIVE [Phase 7]. Pieces: Host={(!string.IsNullOrEmpty(host))}");
 
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 5)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (V7)");
     c.RoutePrefix = "swagger";
 });
 
-// --- Non-Blocking Background Migration ---
+// --- BACKGROUND MIGRATION ---
 Task.Run(() => {
     using (var scope = app.Services.CreateScope())
     {
         try 
         {
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            Console.WriteLine("[ASYNC] Migration starting...");
-            db.Database.Migrate();
-            Console.WriteLine("[ASYNC] MIGRATION SUCCESS! Everything is ready.");
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Console.WriteLine("[V7-INFO] Migration starting from auto-detected pieces...");
+            dbContext.Database.Migrate();
+            Console.WriteLine("[V7-INFO] SUCCESS! The system is now operational.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ASYNC-ERROR] Failed: {ex.Message}");
-            if (ex.InnerException != null) Console.WriteLine($"[INNER-REASON] {ex.InnerException.Message}");
+            Console.WriteLine($"[V7-ERROR] Migration Failed: {ex.Message}");
+            if (ex.InnerException != null) Console.WriteLine($"[V7-INNER] Reason: {ex.InnerException.Message}");
         }
     }
 });
 
-// --- Pipeline ---
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
@@ -129,5 +137,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine($"[DEPLOY] Server listening on PORT: {port}");
 app.Run($"http://0.0.0.0:{port}");
