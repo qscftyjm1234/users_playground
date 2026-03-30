@@ -9,7 +9,11 @@ using LifeHub.Infrastructure.Authentication;
 using LifeHub.Infrastructure.Services;
 using LifeHub.API.Middleware;
 
-// --- Services Configuration ---
+// --- RECOVERY VERSION: 2026-03-30-V2 ---
+Console.WriteLine("================================================================");
+Console.WriteLine("[DEBUG] APP STARTING - RECOVERY VERSION V2");
+Console.WriteLine("================================================================");
+
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Add Services
@@ -17,77 +21,57 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 2. Database Configuration - ULTIMATE ROBUST MODE
-Console.WriteLine("----------------------------------------------------------------");
-Console.WriteLine("[DEBUG] Checking Environment Variables...");
-var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
-           ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
-           ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
-           ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
-
-string? connectionString = null;
-if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
+// 2. Database Configuration - EXTREME DIAGNOSTIC MODE
+var envVars = Environment.GetEnvironmentVariables();
+Console.WriteLine("[DEBUG] Scanning Environment Variables (Prefix Check):");
+foreach (System.Collections.DictionaryEntry de in envVars)
 {
-    Console.WriteLine("[DB CONFIG] Detected mysql:// URL format. Parsing...");
-    try
+    string key = de.Key.ToString() ?? "";
+    if (key.Contains("MYSQL") || key.Contains("DATABASE") || key.Contains("CONNECTION"))
     {
-        var uri = new Uri(rawUrl);
-        var userInfo = uri.UserInfo.Split(':');
-        var user = userInfo[0];
-        var password = userInfo.Length > 1 ? userInfo[1] : "";
-        var host = uri.Host;
-        var port = uri.Port > 0 ? uri.Port : 3306;
-        var database = uri.AbsolutePath.TrimStart('/');
-        
-        connectionString = $"Server={host};Port={port};Database={database};User={user};Password={password};SslMode=None;AllowPublicKeyRetrieval=True;";
-        Console.WriteLine($"[DB CONFIG] Parse SUCCESS: Server={host}; Database={database}; Port={port};");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[DB CONFIG] Parse ERROR: {ex.Message}");
+        string val = de.Value?.ToString() ?? "";
+        string maskedVal = val.Length > 5 ? val.Substring(0, 5) + "..." : val;
+        Console.WriteLine($"[DEBUG] Found Key: {key} | Value Start: {maskedVal}");
     }
 }
-else if (!string.IsNullOrEmpty(rawUrl))
-{
-    connectionString = rawUrl;
-    Console.WriteLine("[DB CONFIG] Using raw connection string from environment.");
-}
 
-if (string.IsNullOrEmpty(connectionString))
-{
-    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    Console.WriteLine("[DB CONFIG] Falling back to config-based connection string.");
-}
+string? connStr = Environment.GetEnvironmentVariable("DATABASE_URL") 
+                ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
+                ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
+                ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+                ?? builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Masked log
-if (!string.IsNullOrEmpty(connectionString))
+if (string.IsNullOrEmpty(connStr))
 {
-    var parts = connectionString.Split(';');
-    var sb = new StringBuilder("[DB CONFIG] Final: ");
-    foreach (var part in parts)
-    {
-        var t = part.Trim();
-        if (t.StartsWith("Server=", StringComparison.OrdinalIgnoreCase) || 
-            t.StartsWith("Database=", StringComparison.OrdinalIgnoreCase) ||
-            t.StartsWith("Port=", StringComparison.OrdinalIgnoreCase))
-        {
-            sb.Append(t).Append("; ");
-        }
+    Console.WriteLine("[DB CONFIG] !!! WARNING: NO CONNECTION STRING FOUND. Using DUMMY to prevent crash.");
+    // USE DUMMY STRING TO PREVENT SPECIFICATION ERROR AT INDEX 0
+    connStr = "Server=dummy;Database=dummy;User=dummy;Password=dummy;";
+}
+else if (connStr.StartsWith("mysql://"))
+{
+    Console.WriteLine("[DB CONFIG] Parsing mysql:// format...");
+    try {
+        var uri = new Uri(connStr);
+        var auth = uri.UserInfo.Split(':');
+        connStr = $"Server={uri.Host};Port={(uri.Port > 0 ? uri.Port : 3306)};Database={uri.AbsolutePath.TrimStart('/')};User={auth[0]};Password={(auth.Length > 1 ? auth[1] : "")};SslMode=None;AllowPublicKeyRetrieval=True;";
+    } catch { 
+        Console.WriteLine("[DB CONFIG] Parser Failed. Using as-is.");
     }
-    Console.WriteLine(sb.ToString());
 }
-Console.WriteLine("----------------------------------------------------------------");
+
+Console.WriteLine($"[DB CONFIG] Connection String Loaded (Length: {connStr.Length})");
+Console.WriteLine("------------------------------------------");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    var serverVersion = new MySqlServerVersion(new Version(8, 0, 0));
-    options.UseMySql(connectionString ?? "", serverVersion, mysqlOptions => 
+    var serverVer = new MySqlServerVersion(new Version(8, 0, 0));
+    options.UseMySql(connStr, serverVer, mysqlOptions => 
     {
-        mysqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null);
+        mysqlOptions.EnableRetryOnFailure(2, TimeSpan.FromSeconds(5), null);
     });
 });
 
-// 3. DI & Auth (Condensed for clarity)
+// 3. DI
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
@@ -108,40 +92,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 // 5. CORS
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() 
-                    ?? new[] { "http://localhost:3000", "http://localhost:5173" };
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowReactApp", policy => policy.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader());
-});
+var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+builder.Services.AddCors(o => o.AddPolicy("AllowReactApp", p => p.WithOrigins(origins).AllowAnyMethod().AllowAnyHeader()));
 
 var app = builder.Build();
 
-// --- Production Features ---
+// --- Debug Endpoints ---
+app.MapGet("/health", () => $"LifeHub Backend ALIVE [Version V2] Time: {DateTime.Now}");
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Railway-Prod)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (V2 Recovery)");
     c.RoutePrefix = "swagger";
 });
 
-// [DEBUG] Add Health Check endpoint
-app.MapGet("/health", () => "OK");
-
-// --- BACKGROUND Auto Migration ---
-// Move migration to background to avoid blocking server startup (fixes 502)
+// --- Non-Blocking Migration ---
 Task.Run(() => {
     using (var scope = app.Services.CreateScope())
     {
         try 
         {
-            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            Console.WriteLine("[ASYNC-INFO] Starting Migration in background...");
-            context.Database.Migrate();
-            Console.WriteLine("[ASYNC-INFO] Migration SUCCESS.");
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Console.WriteLine("[V2-ASYNC] Starting migration...");
+            db.Database.Migrate();
+            Console.WriteLine("[V2-ASYNC] Migration SUCCESS.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ASYNC-ERROR] Migration FAILED: {ex.Message}");
+            Console.WriteLine($"[V2-ASYNC] Migration FAILED: {ex.Message}");
         }
     }
 });
@@ -153,9 +130,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// [FIX 502] Log Port and listen
-var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine($"[DEPLOY] Listening on PORT: {port}");
-
-// On Railway, binding to 0.0.0.0 is better than localhost
+Console.WriteLine("[V2-DEPLOY] Server running. Listening on PORT detected by environment.");
 app.Run();
