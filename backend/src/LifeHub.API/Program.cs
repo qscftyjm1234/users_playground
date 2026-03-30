@@ -9,9 +9,9 @@ using LifeHub.Infrastructure.Authentication;
 using LifeHub.Infrastructure.Services;
 using LifeHub.API.Middleware;
 
-// --- STEP-BY-STEP RECOVERY: PHASE 2 (ADD CORE SERVICES) ---
+// --- STEP-BY-STEP RECOVERY: PHASE 2B (FIX PORT & RESTORE CORE) ---
 Console.WriteLine("================================================================");
-Console.WriteLine("[PHASE 2] STARTING RECOVERY SERVER...");
+Console.WriteLine("[PHASE 2B] STARTING RECOVERY SERVER WITH FINAL PORT FIX...");
 Console.WriteLine("================================================================");
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +21,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 2. Database Configuration - ULTIMATE ROBUST MODE
+// 2. Database Configuration - ROBUST MODE
 var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
@@ -44,10 +44,9 @@ if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
 }
 else if (!string.IsNullOrEmpty(rawUrl)) { connectionString = rawUrl; }
 
-// Use dummy if still null to prevent startup crash (502)
+// Use dummy if null to avoid specification error
 if (string.IsNullOrEmpty(connectionString))
 {
-    Console.WriteLine("[DB CONFIG] Using Dummy connection string.");
     connectionString = "Server=none;Database=none;User=none;Password=none;";
 }
 
@@ -60,11 +59,13 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     });
 });
 
-// 3. DI & Auth
+// 3. DI
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+
+// 4. Auth
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -80,19 +81,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// 5. CORS - Allow all for now to aid debugging
+// 5. CORS
 builder.Services.AddCors(o => o.AddPolicy("AllowReactApp", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 var app = builder.Build();
 
 // --- TEST ENDPOINTS ---
-app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 2]");
-app.MapGet("/health", () => $"LifeHub Core [Phase 2] Time: {DateTime.Now}");
-app.MapGet("/ping", () => "PONG");
+app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 2B - Final Fix]");
+app.MapGet("/health", () => $"LifeHub Core [Phase 2B] ALIVE. Time: {DateTime.Now}");
 
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 2 RECOVERY)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 2B)");
     c.RoutePrefix = "swagger";
 });
 
@@ -103,7 +103,7 @@ Task.Run(() => {
         try 
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            Console.WriteLine("[ASYNC-INFO] Starting Migration in background...");
+            Console.WriteLine("[ASYNC-INFO] Starting Migration...");
             db.Database.Migrate();
             Console.WriteLine("[ASYNC-INFO] Migration SUCCESS.");
         }
@@ -121,7 +121,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// [FIX 502] Log Port and listen
-var port = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine($"[DEPLOY] Server starting on PORT: {port}");
-app.Run();
+// [FIX 502/HEALTH-CHECK] Explicit PORT binding for Railway
+var currentPort = Environment.GetEnvironmentVariable("PORT") ?? "80";
+Console.WriteLine($"[DEPLOY] Final check - Server starting on PORT: {currentPort}");
+app.Run($"http://0.0.0.0:{currentPort}");
