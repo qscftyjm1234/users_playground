@@ -93,6 +93,7 @@ var app = builder.Build();
 
 // HEALTH CHECK
 app.MapGet("/health", () => "LifeHub Backend is Healthy.");
+app.MapGet("/", () => "LifeHub API is Operational.");
 
 // SWAGGER (Enable in Production for Deployment Debugging)
 app.UseSwagger();
