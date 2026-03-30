@@ -9,9 +9,9 @@ using LifeHub.Infrastructure.Authentication;
 using LifeHub.Infrastructure.Services;
 using LifeHub.API.Middleware;
 
-// --- STEP-BY-STEP RECOVERY: PHASE 2B (FIX PORT & RESTORE CORE) ---
+// --- STEP-BY-STEP RECOVERY: PHASE 2C (ULTIMATE AUTO-REPAIR) ---
 Console.WriteLine("================================================================");
-Console.WriteLine("[PHASE 2B] STARTING RECOVERY SERVER WITH FINAL PORT FIX...");
+Console.WriteLine("[PHASE 2C] ULTIMATE AUTO-REPAIR STARTING...");
 Console.WriteLine("================================================================");
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +21,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// 2. Database Configuration - ROBUST MODE
+// 2. Database Configuration - ULTIMATE ROBUST MODE
 var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_URL") 
            ?? Environment.GetEnvironmentVariable("MYSQL_PRIVATE_URL")
@@ -38,16 +38,28 @@ if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("mysql://"))
         var password = userInfo.Length > 1 ? userInfo[1] : "";
         var host = uri.Host;
         var port = uri.Port > 0 ? uri.Port : 3306;
+        
+        // --- AUTO-FILL REPAIR LOGIC ---
         var database = uri.AbsolutePath.TrimStart('/');
+        if (string.IsNullOrEmpty(database)) 
+        {
+            database = "railway"; // Force default name
+            Console.WriteLine("[DB CONFIG] Database name was empty, AUTO-FILLED with 'railway'.");
+        }
+        
         connectionString = $"Server={host};Port={port};Database={database};User={user};Password={password};SslMode=None;AllowPublicKeyRetrieval=True;";
-    } catch { }
+        Console.WriteLine($"[DB CONFIG] Parse SUCCESS: Host={host}; Database={database}; Port={port}");
+    } catch (Exception ex) { 
+        Console.WriteLine($"[DB CONFIG] Parse ERROR: {ex.Message}");
+    }
 }
 else if (!string.IsNullOrEmpty(rawUrl)) { connectionString = rawUrl; }
 
-// Use dummy if null to avoid specification error
+// Use dummy if still null to ensure process starts
 if (string.IsNullOrEmpty(connectionString))
 {
     connectionString = "Server=none;Database=none;User=none;Password=none;";
+    Console.WriteLine("[DB CONFIG] Using Dummy fallback.");
 }
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -87,12 +99,12 @@ builder.Services.AddCors(o => o.AddPolicy("AllowReactApp", p => p.AllowAnyOrigin
 var app = builder.Build();
 
 // --- TEST ENDPOINTS ---
-app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 2B - Final Fix]");
-app.MapGet("/health", () => $"LifeHub Core [Phase 2B] ALIVE. Time: {DateTime.Now}");
+app.MapGet("/", () => "LifeHub Backend ALIVE [Phase 2C - Ultimate Repair]");
+app.MapGet("/health", () => $"ALIVE. Ver: Phase 2C. Time: {DateTime.Now}");
 
 app.UseSwagger();
 app.UseSwaggerUI(c => {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 2B)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LifeHub API (Phase 2C Recovery)");
     c.RoutePrefix = "swagger";
 });
 
@@ -103,13 +115,13 @@ Task.Run(() => {
         try 
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            Console.WriteLine("[ASYNC-INFO] Starting Migration...");
+            Console.WriteLine("[ASYNC] Starting background migration...");
             db.Database.Migrate();
-            Console.WriteLine("[ASYNC-INFO] Migration SUCCESS.");
+            Console.WriteLine("[ASYNC] MIGRATION SUCCESS! Your database is now ready.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ASYNC-ERROR] Migration FAILED: {ex.Message}");
+            Console.WriteLine($"[ASYNC-ERROR] Migration FAILED after parse: {ex.Message}");
         }
     }
 });
@@ -121,7 +133,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// [FIX 502/HEALTH-CHECK] Explicit PORT binding for Railway
-var currentPort = Environment.GetEnvironmentVariable("PORT") ?? "80";
-Console.WriteLine($"[DEPLOY] Final check - Server starting on PORT: {currentPort}");
-app.Run($"http://0.0.0.0:{currentPort}");
+// [FINAL FIX] Port binding for Railway health checks
+var finalPort = Environment.GetEnvironmentVariable("PORT") ?? "80";
+Console.WriteLine($"[DEPLOY] Final check - Starting on PORT: {finalPort}");
+app.Run($"http://0.0.0.0:{finalPort}");
