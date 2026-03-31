@@ -1,6 +1,11 @@
 # Build stage
 FROM node:20-alpine AS build-stage
 WORKDIR /app
+
+# [New] Receive build-time environment variables from Railway
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 COPY package*.json ./
 RUN npm install
 COPY . .
